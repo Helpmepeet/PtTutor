@@ -50,7 +50,12 @@ export function extractInlineNarrations(content: string): {
       return " ";
     });
   return {
-    content: dialogue.replace(/\s+/g, " ").trim(),
+    // Insert a missing space when one sentence runs straight into the next
+    // (e.g. an inline narration glued to dialogue: "...sold out.Sure thing").
+    content: dialogue
+      .replace(/([.!?])([A-Z])/g, "$1 $2")
+      .replace(/\s+/g, " ")
+      .trim(),
     narrations
   };
 }

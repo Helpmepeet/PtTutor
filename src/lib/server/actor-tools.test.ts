@@ -26,6 +26,13 @@ describe("extractInlineNarrations", () => {
     expect(result.content).toBe("Sure, would you like that hot or iced?");
   });
 
+  it("inserts a missing space when sentences run together", () => {
+    const input =
+      "The barista glances at the case and frowns: the muffin is sold out.Sure thing, I have a croissant.";
+    const result = extractInlineNarrations(input);
+    expect(result.content).toContain("sold out. Sure thing");
+  });
+
   it("does not treat bold (**...**) as narration", () => {
     const input = "That costs **five dollars**, please.";
     const result = extractInlineNarrations(input);

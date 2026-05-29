@@ -107,7 +107,7 @@ export type ToolCallHandler = (
   args: Record<string, unknown>
 ) => string;
 
-type CodexInputItem =
+export type CodexInputItem =
   | { role: "user"; content: Array<{ type: "input_text"; text: string }> }
   | { type: "function_call"; call_id: string; name: string; arguments: string }
   | { type: "function_call_output"; call_id: string; output: string };
@@ -427,10 +427,6 @@ async function* streamWithToolLoop(
     let currentCallName: string | null = null;
     let currentCallArgs = "";
     let hadText = false;
-    // Track completed function_call items to replay in the continuation request.
-    // The Responses API requires the function_call item to appear in the input
-    // alongside its function_call_output so the backend can match call_ids.
-    const completedFunctionCalls: Array<{ call_id: string; name: string; arguments: string }> = [];
 
     const handleEvent = (raw: string): string | null => {
       const dataLines = raw
@@ -526,26 +522,57 @@ async function* streamWithToolLoop(
       return;
     }
 
-    // Execute tool calls and build next request inputs
-    const toolOutputItems: CodexInputItem[] = [];
+    // Execute each tool call (emitting a tool_call event) and collect the
+    // results, then build the continuation input from them.
+    const executed: ExecutedToolCall[] = [];
     for (const call of pendingToolCalls) {
       let args: Record<string, unknown> = {};
       try { args = JSON.parse(call.args_raw); } catch { /* use empty */ }
       yield { type: "tool_call", name: call.name, args };
-      const result = onToolCall(call.name, args);
-      toolOutputItems.push({
-        type: "function_call_output",
+      executed.push({
         call_id: call.call_id,
-        output: result
+        name: call.name,
+        arguments: call.args_raw,
+        output: onToolCall(call.name, args)
       });
     }
 
-    // Build continuation request
     currentRequest = {
       ...request,
-      input: [...request.input, ...toolOutputItems]
+      input: buildContinuationInput(request.input, executed)
     };
   }
+}
+
+export type ExecutedToolCall = {
+  call_id: string;
+  name: string;
+  arguments: string;
+  output: string;
+};
+
+// Build the input for the follow-up request after tool calls. The Responses
+// API (store:false) requires each function_call item to be replayed in the
+// input alongside its function_call_output so the backend can match the
+// call_id. Sending only the outputs yields a 400 "No tool call found for
+// function call output with call_id ...". Order: original input, then the
+// assistant's function_call items, then their matching outputs.
+export function buildContinuationInput(
+  originalInput: CodexInputItem[],
+  executed: ExecutedToolCall[]
+): CodexInputItem[] {
+  const functionCallItems: CodexInputItem[] = executed.map((call) => ({
+    type: "function_call",
+    call_id: call.call_id,
+    name: call.name,
+    arguments: call.arguments
+  }));
+  const outputItems: CodexInputItem[] = executed.map((call) => ({
+    type: "function_call_output",
+    call_id: call.call_id,
+    output: call.output
+  }));
+  return [...originalInput, ...functionCallItems, ...outputItems];
 }
 
 export function codexTextStreamWithTools({
