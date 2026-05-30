@@ -2,6 +2,8 @@
 
 Local MVP for the English Roleplay Coach described in `SPEC.md`.
 
+<img width="1394" height="1008" alt="image" src="https://github.com/user-attachments/assets/4212cebd-ec90-4f2a-8c85-5006305d6a97" />
+
 ## Local setup
 
 1. Copy `.env.example` to `.env.local`.
