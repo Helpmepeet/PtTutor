@@ -108,3 +108,33 @@ export type UsageSnapshot = {
   secondary: RateLimitWindow | null; // ~7 days
   captured_at: number;
 };
+
+export type MarkerStat = {
+  wrong: string;
+  fix: string;
+  category: MarkerCategory;
+  severity: MarkerSeverity;
+  count: number;
+  sample_sentence: string;
+  scenario_name: string;
+};
+
+export type InsightFlashcard = {
+  id: string;
+  sentence: string;
+  span_text: string;
+  fix: string;
+  why: string;
+  category: MarkerCategory;
+  scenario_name: string;
+};
+
+export type InsightsSummary = {
+  messages_reviewed: number;
+  clean_count: number;
+  total_markers: number;
+  by_category: Record<MarkerCategory, number>;
+  by_severity: Record<MarkerSeverity, number>;
+  top_fixes: MarkerStat[];
+  flashcards: InsightFlashcard[];
+};

@@ -1,7 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getScenarioById, listScenarios as listBuiltInScenarios } from "@/lib/scenarios";
+import type { InsightRow } from "@/lib/insights";
 import type {
   RoleplayMessage,
+  ReviewerOutput,
   Scenario,
   RoleplaySession,
   TeacherMessage
@@ -30,6 +32,9 @@ function createServiceClient(): SupabaseClient {
     }
   );
 }
+
+const SUPABASE_PAGE_SIZE = 1000;
+const SUPABASE_IN_FILTER_BATCH_SIZE = 200;
 
 async function ensureUser(supabase: SupabaseClient, user: AuthenticatedUser) {
   const { error } = await supabase.from("users").upsert({
@@ -228,6 +233,95 @@ export function createSupabaseStore(): RoleplayStore {
       return session
         ? { session, message: message as RoleplayMessage }
         : null;
+    },
+
+    async getInsightRows(userId): Promise<InsightRow[]> {
+      const sessions: { id: string; scenario_id: string }[] = [];
+      for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+        const { data, error } = await supabase
+          .from("sessions")
+          .select("id, scenario_id")
+          .eq("user_id", userId)
+          .order("id", { ascending: true })
+          .range(from, from + SUPABASE_PAGE_SIZE - 1);
+        if (error) {
+          throw new Response(error.message, { status: 500 });
+        }
+        sessions.push(...(data ?? []));
+        if (!data || data.length < SUPABASE_PAGE_SIZE) break;
+      }
+      if (sessions.length === 0) return [];
+
+      const sessionScenario = new Map(
+        sessions.map((session) => [session.id, session.scenario_id])
+      );
+      const messages: {
+        id: string;
+        session_id: string;
+        content: string;
+        reviewer_output: ReviewerOutput;
+        created_at: string;
+      }[] = [];
+      for (let i = 0; i < sessions.length; i += SUPABASE_IN_FILTER_BATCH_SIZE) {
+        const sessionIds = sessions
+          .slice(i, i + SUPABASE_IN_FILTER_BATCH_SIZE)
+          .map((session) => session.id);
+        for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+          const { data, error } = await supabase
+            .from("messages")
+            .select("id, session_id, content, reviewer_output, created_at")
+            .in("session_id", sessionIds)
+            .eq("role", "user")
+            .not("reviewer_output", "is", null)
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(from, from + SUPABASE_PAGE_SIZE - 1);
+          if (error) {
+            throw new Response(error.message, { status: 500 });
+          }
+          messages.push(...((data ?? []) as typeof messages));
+          if (!data || data.length < SUPABASE_PAGE_SIZE) break;
+        }
+      }
+      messages.sort(
+        (a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)
+      );
+
+      const scenarioIds = [...new Set(sessionScenario.values())];
+      const nameById = new Map<string, string>();
+      const customIds: string[] = [];
+      for (const id of scenarioIds) {
+        const builtIn = getScenarioById(id);
+        if (builtIn) {
+          nameById.set(id, builtIn.name);
+        } else {
+          customIds.push(id);
+        }
+      }
+      if (customIds.length > 0) {
+        for (let i = 0; i < customIds.length; i += SUPABASE_IN_FILTER_BATCH_SIZE) {
+          const { data: customScenarios, error: customError } = await supabase
+            .from("custom_scenarios")
+            .select("id, name")
+            .eq("user_id", userId)
+            .in("id", customIds.slice(i, i + SUPABASE_IN_FILTER_BATCH_SIZE));
+          if (customError) {
+            throw new Response(customError.message, { status: 500 });
+          }
+          for (const scenario of customScenarios ?? []) {
+            nameById.set(scenario.id, scenario.name);
+          }
+        }
+      }
+
+      return messages.map((message) => {
+        const scenarioId = sessionScenario.get(message.session_id);
+        return {
+          content: message.content,
+          reviewer_output: message.reviewer_output,
+          scenario_name: scenarioId ? nameById.get(scenarioId) ?? "Practice" : "Practice"
+        };
+      });
     },
 
     async updateSession(userId, sessionId, input: UpdateSessionInput) {

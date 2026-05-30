@@ -1,4 +1,5 @@
 import { getScenarioById, listScenarios as listBuiltInScenarios } from "@/lib/scenarios";
+import type { InsightRow } from "@/lib/insights";
 import type {
   RoleplayMessage,
   Scenario,
@@ -162,6 +163,32 @@ export function createMemoryStore(state?: MemoryState): RoleplayStore {
           candidate.id === message.session_id && candidate.user_id === userId
       );
       return session ? { session: toDetail(memory, session), message } : null;
+    },
+
+    async getInsightRows(userId): Promise<InsightRow[]> {
+      const sessionScenario = new Map(
+        memory.sessions
+          .filter((session) => session.user_id === userId)
+          .map((session) => [session.id, session.scenario_id])
+      );
+      return memory.messages
+        .filter(
+          (message) =>
+            message.role === "user" &&
+            sessionScenario.has(message.session_id) &&
+            message.reviewer_output != null
+        )
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+        .map((message) => {
+          const scenarioId = sessionScenario.get(message.session_id);
+          return {
+            content: message.content,
+            reviewer_output: message.reviewer_output!,
+            scenario_name: scenarioId
+              ? getScenarioForUser(memory, userId, scenarioId)?.name ?? "Practice"
+              : "Practice"
+          };
+        });
     },
 
     async updateSession(userId, sessionId, input: UpdateSessionInput) {

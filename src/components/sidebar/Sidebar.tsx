@@ -1,4 +1,4 @@
-import { BarChart3, Ellipsis, LogOut, Plus, Trash2 } from "lucide-react";
+import { BarChart3, Ellipsis, Lightbulb, LogOut, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { useEffect, useRef, useState } from "react";
@@ -196,6 +196,13 @@ export function Sidebar({
           })
         )}
       </nav>
+
+      <Link
+        className="flex h-12 shrink-0 items-center gap-2 border-t border-border-subtle px-4 text-sm text-text-secondary transition-colors hover:text-text-primary"
+        href="/insights"
+      >
+        <Lightbulb size={16} /> Your patterns
+      </Link>
 
       <Link
         className="flex h-12 shrink-0 items-center gap-2 border-t border-border-subtle px-4 text-sm text-text-secondary transition-colors hover:text-text-primary"

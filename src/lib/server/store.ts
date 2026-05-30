@@ -10,6 +10,7 @@ import type {
   SessionDetail,
   TeacherMessage
 } from "@/lib/types";
+import type { InsightRow } from "@/lib/insights";
 import type { NormalizedScenarioInput } from "@/lib/scenario-input";
 
 export type CreateSessionInput = {
@@ -69,6 +70,7 @@ export type RoleplayStore = {
     userId: string,
     messageId: string
   ): Promise<{ session: SessionDetail; message: RoleplayMessage } | null>;
+  getInsightRows(userId: string): Promise<InsightRow[]>;
   updateSession(
     userId: string,
     sessionId: string,
